@@ -40,33 +40,27 @@ matplotlib.rcParams['ps.fonttype'] = 42
 #%%
 chipseeker = False # if annotation is chipseeker-based
 bedtools = True # if annotation is bedtools-intersect based
-source = 'RefSeq'
-date=''
+k4me3 = False # if taking H3K4me3 into consideration
+source = 'refseq'
+date='0801'
 
 #%%
 element = pd.read_csv(r'C:\Users\libin\UCSF\MMR\mmr_elements_withID', sep="\t")
 
 hg38_geneID2Name = pd.read_csv(r'C:\Users\libin\UCSF\hg38_general\gencode.v32.geneID2geneNameType', sep="\t").dropna(axis=0)
-hg38_tx2gene = pd.read_csv(r'C:\Users\libin\UCSF\hg38_general\gencode.v32.transcript2gene', sep="\t").dropna(axis=0)
+#hg38_tx2gene = pd.read_csv(r'C:\Users\libin\UCSF\hg38_general\gencode.v32.transcript2gene', sep="\t").dropna(axis=0)
+hg38_tx2gene = pd.read_csv(r'C:\Users\libin\UCSF\hg38_general\refseq\refseq.hg38.txID2geneName', sep="\t").dropna(axis=0)
 
 #%%
 if bedtools:
 
-        promoter_intersect_H3K4me3_infile = r'C:\Users\libin\UCSF\MMR\promoter.H3K4me3.intersect'
+        promoter_intersect_H3K4me3_infile = r'C:\Users\libin\UCSF\MMR\{}.promoter.H3K4me3.intersect'.format(source)
         H3K4me3_intersect_infile = r'C:\Users\libin\UCSF\MMR\MMR_element.H4K4me3.intersect'
-        intron_intersect_infile = r'C:\Users\libin\UCSF\MMR\MMR_element.intron.intersect'
-        exon_intersect_infile = r'C:\Users\libin\UCSF\MMR\MMR_element.exon.intersect'
-        
-        # H3K4me3 linked to promoter regions they intersect with
-        promoter_intersect_H3K4me3 = pd.read_csv(promoter_intersect_H3K4me3_infile, sep="\t",
-                                                 names=["pmt_chr", "pmt_start", "pmt_end", "tx_id", "gene_id", "gene_name", "peak_chr", "peak_start", "peak_end", "strand", "peak_ID", "depr"])
-        #de-dup : item dropped if H3K4me3 peak intersect with same gene but dif tx
-        promoter_intersect_H3K4me3 = promoter_intersect_H3K4me3.drop_duplicates(subset=["gene_id", "gene_name", "peak_chr", "peak_start", "peak_end", "strand", "peak_ID", "depr"])
-        # group by H3K4me3 peak (each peak may cover more than one promoter reions)
-        promoter_intersect_H3K4me3 = promoter_intersect_H3K4me3[["gene_name", "peak_ID"]]
-        promoter_intersect_H3K4me3 = promoter_intersect_H3K4me3. groupby(['peak_ID'], as_index=False).agg(",".join).reset_index().drop(["index"], axis=1)
-        
-        
+        intron_intersect_infile = r'C:\Users\libin\UCSF\MMR\{}.MMR_element.intron.intersect'.format(source)
+        exon_intersect_infile = r'C:\Users\libin\UCSF\MMR\{}.MMR_element.exon.intersect'.format(source)
+        promoter_intersect_file = r'C:\Users\libin\UCSF\MMR\{}.MMR_element.promoter.1kb.intersect'.format(source)
+
+        ## element overlapping with H3K4me3 peaks
         H3K4me3_intersect = pd.read_csv(H3K4me3_intersect_infile, sep="\t", 
                                          names=["chr", "Start", "End", "Element.type", "ID", "peak_chr", "peak_start", "peak_end", "strand", "peak_ID", "depr"])
         H3K4me3_intersect = H3K4me3_intersect.drop(["strand", "depr"], axis=1)
@@ -74,77 +68,187 @@ if bedtools:
         #element linked to H3K4me3 peaks they intersect with
         element_H3K4me3 = pd.merge(element, H3K4me3_intersect, on=['chr', 'Start', 'End', 'Element.type', 'ID'], how="left").fillna(0)
         #element_H3K4me3 = element_H3K4me3.drop_duplicates(subset=['chr', 'Start', 'End', 'Element.type', 'ID'], keep="first").fillna(0)
-        element_H3K4me3[["peak_start", "peak_end", "peak_ID"]] = element_H3K4me3[["peak_start", "peak_end", "peak_ID"]].astype(int)
-        
-        # element connect to promoter through H3K4me3 peak
-        element_promoter = pd.merge(element_H3K4me3, promoter_intersect_H3K4me3, on="peak_ID", how="left")
-        element_promoter["H3K4me3"] = np.nan
-        element_promoter.loc[element_promoter["peak_ID"] != 0, "H3K4me3"] = "H3K4me3"
-        element_promoter["promoter"] = element_promoter["gene_name"]
-        element_promoter[["H3K4me3", "promoter"]] = element_promoter[["H3K4me3", "promoter"]].astype(str)
-        element_promoter = element_promoter.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join).reset_index().drop(["index"], axis=1)
-               
-        
-        intron_intersect = pd.read_csv(intron_intersect_infile, sep="\t",
-                                       names=["chr", "Start", "End", "Element.type", "ID", "intron_chr", "intron_start", "intron_end", "tx_id"])
-        
-        intron_intersect["transcript_id"] = intron_intersect["tx_id"].str.extract(r'(.+?)\.\d+')
-        intron_intersect_update = pd.merge(intron_intersect, hg38_tx2gene, on=["transcript_id"], how="left")
-        intron_intersect_update = intron_intersect_update.drop_duplicates(subset=['chr', 'Start', 'End', 'Element.type', 'ID', "gene_id"])
-        # group by element
-        intron_intersect_update = intron_intersect_update.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join)
-        intron_intersect_update = intron_intersect_update[["chr", "Start", "End", "Element.type", "ID", "gene_name"]]
-        
-        #element annotated with intron
-        element_intron = pd.merge(element, intron_intersect_update, on=["chr", "Start", "End", "Element.type", "ID"], how="left").fillna(0)
-        element_intron["intron"] = float('NaN')
-        element_intron.loc[element_intron["gene_name"] != 0, "intron"] = "intron"
-        element_intron["intron_gene"] = element_intron["gene_name"]
-        element_intron = element_intron.drop(["gene_name"], axis=1)
-                
-        
-        exon_intersect = pd.read_csv(exon_intersect_infile, sep="\t",
-                                     names=["chr", "Start", "End", "Element.type", "ID", "exon_chr", "exon_start", "exon_end", "tx_id", "exon_id"])
-        exon_intersect["transcript_id"] = exon_intersect["tx_id"].str.extract(r'(.+?)\.\d+')
-        exon_intersect_update = pd.merge(exon_intersect, hg38_tx2gene, on=["transcript_id"], how="left")
-        exon_intersect_update = exon_intersect_update.drop_duplicates(subset=['chr', 'Start', 'End', 'Element.type', 'ID', "gene_id"])
-        
-        exon_intersect_update = exon_intersect_update.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join)
-        exon_intersect_update = exon_intersect_update[["chr", "Start", "End", "Element.type", "ID", "gene_name"]]
-        
-        element_exon = pd.merge(element, exon_intersect_update, on=["chr", "Start", "End", "Element.type", "ID"], how="left").fillna(0)
-        element_exon["exon"] = float('NaN')
-        element_exon.loc[element_exon["gene_name"] != 0, "exon"] = "exon"
-        element_exon["exon_gene"] = element_exon["gene_name"]
-        element_exon = element_exon.drop(["gene_name"], axis=1)
-        
-        
-        ann_list = [element_promoter, element_intron, element_exon]
-        element_anno_complete = reduce(lambda left,right: pd.merge(left, right, on=["chr", "Start", "End", "Element.type", "ID"], how="outer"), ann_list)
-        element_anno_complete[["intron", "exon"]] = element_anno_complete[["intron", "exon"]].astype(str)
-        element_anno_complete.loc[element_anno_complete["intron_gene"] == 0, 'intron_gene'] = "nan"
-        element_anno_complete.loc[element_anno_complete["exon_gene"] == 0, 'exon_gene'] = "nan"
-        element_anno_complete["intergenic"] = "nan"
-        element_anno_complete.loc[(element_anno_complete["H3K4me3"] == "nan") & (element_anno_complete["intron"] == "nan") & (element_anno_complete["exon"] == "nan"), "intergenic"] = "intergenic"
-        
-        element_anno_complete = element_anno_complete.replace(to_replace ="nan", value ="") 
-        # element_anno_complete.to_csv(r'C:\Users\libin\UCSF\MMR\manual_annotation_complete_0718.csv', sep=",", index=False, header=True)
-        
-        
-        ### group intron, exon to genic
-        ### set annotation priority to : promoter, genic, intergenic
-        element_anno_complete["annotation"] = np.nan
-        element_anno_complete["cognate_gene"] = np.nan
-        
-        element_anno_complete.loc[element_anno_complete["promoter"] != "", "annotation"] = "promoter"
-        element_anno_complete["cognate_gene"] = (element_anno_complete["promoter"]).where(element_anno_complete["annotation"].str.contains("promoter"))
-        element_anno_complete.loc[(element_anno_complete["promoter"] == "") & ((element_anno_complete["exon"] != "") | (element_anno_complete["intron"] != "")), "annotation"] = "genic"
-        element_anno_complete["cognate_gene"] = np.where((element_anno_complete["annotation"] == "genic"),(element_anno_complete["exon_gene"]+" "+element_anno_complete["intron_gene"]) ,element_anno_complete["cognate_gene"])
-        element_anno_complete.loc[element_anno_complete["intergenic"] != "", "annotation"] = "intergenic"
-        
-        element_anno_complete_update = element_anno_complete[['chr','Start','End','Element.type','ID','annotation','cognate_gene']]
-        element_anno_complete_update.to_csv(r'C:\Users\libin\UCSF\MMR\manual_annotation_complete_update_{}_{}.csv'.format(source, date), sep=",", index=False, header=True)
+        element_H3K4me3[["peak_start", "peak_end", "peak_ID"]] = element_H3K4me3[["peak_start", "peak_end", "peak_ID"]].astype(int)   
+        # H3K4me3 linked to promoter regions they intersect with
+#%%        
+        if source == "refseq":                
+                #%%
+                if k4me3:
+                        promoter_intersect_H3K4me3 = pd.read_csv(promoter_intersect_H3K4me3_infile, sep="\t",
+                                                        names=["pmt_chr", "pmt_start", "pmt_end", "tx_id", "gene_name", "peak_chr", "peak_start", "peak_end", "strand", "peak_ID", "depr"])
 
+                #de-dup : item dropped if H3K4me3 peak intersect with same gene but dif tx
+                        promoter_intersect_H3K4me3 = promoter_intersect_H3K4me3.drop_duplicates(subset=["gene_name", "peak_chr", "peak_start", "peak_end", "strand", "peak_ID", "depr"])
+                        # group by H3K4me3 peak (each peak may cover more than one promoter reions)
+                        promoter_intersect_H3K4me3 = promoter_intersect_H3K4me3[["gene_name", "peak_ID"]]
+                        promoter_intersect_H3K4me3 = promoter_intersect_H3K4me3. groupby(['peak_ID'], as_index=False).agg(",".join).reset_index().drop(["index"], axis=1)
+                                
+                        # element connect to promoter through H3K4me3 peak
+                        element_promoter = pd.merge(element_H3K4me3, promoter_intersect_H3K4me3, on="peak_ID", how="left")
+                        element_promoter["H3K4me3"] = np.nan
+                        element_promoter.loc[element_promoter["peak_ID"] != 0, "H3K4me3"] = "H3K4me3"
+                        element_promoter["promoter"] = element_promoter["gene_name"]
+                        element_promoter = element_promoter.drop_duplicates(subset=["ID", "H3K4me3", "promoter"])
+                        element_promoter[["H3K4me3", "promoter"]] = element_promoter[["H3K4me3", "promoter"]].astype(str)
+                        element_promoter = element_promoter.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join)#.reset_index().drop(["index"], axis=1)
+                else:
+                        promoter_intersect = pd.read_csv(promoter_intersect_file, sep="\t",
+                                                names=["chr", "Start", "End", "Element.type", "ID", "pmt_chr", "pmt_start", "pmt_end", "tx_id", "gene_name"])
+                        promoter_intersect_update = promoter_intersect.drop_duplicates(subset=['chr', 'Start', 'End', 'Element.type', 'ID', "gene_name"])
+                        promoter_intersect_update = promoter_intersect_update.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join)
+                        promoter_intersect_update = promoter_intersect_update[["chr", "Start", "End", "Element.type", "ID", "gene_name"]]
+                        #element annotated with promoter
+                        element_promoter = pd.merge(element, promoter_intersect_update, on=["chr", "Start", "End", "Element.type", "ID"], how="left").fillna(0)
+                        element_promoter["promoter"] = np.nan
+                        element_promoter.loc[element_promoter["gene_name"] != 0, "promoter"] = "promoter"
+                        element_promoter["promoter_gene"] = element_promoter["gene_name"]
+                        element_promoter = element_promoter.drop(["gene_name"], axis=1)
+#%%                
+                
+                intron_intersect = pd.read_csv(intron_intersect_infile, sep="\t",
+                                        names=["chr", "Start", "End", "Element.type", "ID", "intron_chr", "intron_start", "intron_end", "intron_anno"])
+             
+                intron_intersect["transcript_id"] = intron_intersect["intron_anno"].str.extract(r'intron\((.+?),')
+                intron_intersect_update = pd.merge(intron_intersect, hg38_tx2gene, on=["transcript_id"], how="left")
+                intron_intersect_update = intron_intersect_update.drop_duplicates(subset=['chr', 'Start', 'End', 'Element.type', 'ID', "gene_name"])
+                # group by element
+                intron_intersect_update = intron_intersect_update.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join)
+                intron_intersect_update = intron_intersect_update[["chr", "Start", "End", "Element.type", "ID", "gene_name"]]
+              
+                #element annotated with intron
+                element_intron = pd.merge(element, intron_intersect_update, on=["chr", "Start", "End", "Element.type", "ID"], how="left").fillna(0)
+                element_intron["intron"] = float('NaN')
+                element_intron.loc[element_intron["gene_name"] != 0, "intron"] = "intron"
+                element_intron["intron_gene"] = element_intron["gene_name"]
+                element_intron = element_intron.drop(["gene_name"], axis=1)
+                       
+                
+                exon_intersect = pd.read_csv(exon_intersect_infile, sep="\t",
+                                        names=["chr", "Start", "End", "Element.type", "ID", "exon_chr", "exon_start", "exon_end", "exon_anno"])
+
+                exon_intersect = exon_intersect[exon_intersect["exon_anno"].str.contains('exon\(')]
+                exon_intersect["transcript_id"] = exon_intersect["exon_anno"].str.extract(r'exon\((.+?),')
+                exon_intersect_update = pd.merge(exon_intersect, hg38_tx2gene, on=["transcript_id"], how="left")
+                exon_intersect_update = exon_intersect_update.drop_duplicates(subset=['chr', 'Start', 'End', 'Element.type', 'ID', "gene_name"])
+                
+                exon_intersect_update = exon_intersect_update.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join)
+                exon_intersect_update = exon_intersect_update[["chr", "Start", "End", "Element.type", "ID", "gene_name"]]
+                
+                element_exon = pd.merge(element, exon_intersect_update, on=["chr", "Start", "End", "Element.type", "ID"], how="left").fillna(0)
+                element_exon["exon"] = float('NaN')
+                element_exon.loc[element_exon["gene_name"] != 0, "exon"] = "exon"
+                element_exon["exon_gene"] = element_exon["gene_name"]
+                element_exon = element_exon.drop(["gene_name"], axis=1)
+#%%                
+        
+        else:
+                promoter_intersect_H3K4me3 = pd.read_csv(promoter_intersect_H3K4me3_infile, sep="\t",
+                                                        names=["pmt_chr", "pmt_start", "pmt_end", "tx_id", "gene_id", "gene_name", "peak_chr", "peak_start", "peak_end", "strand", "peak_ID", "depr"])
+                #de-dup : item dropped if H3K4me3 peak intersect with same gene but dif tx
+                promoter_intersect_H3K4me3 = promoter_intersect_H3K4me3.drop_duplicates(subset=["gene_id", "gene_name", "peak_chr", "peak_start", "peak_end", "strand", "peak_ID", "depr"])
+                # group by H3K4me3 peak (each peak may cover more than one promoter reions)
+                promoter_intersect_H3K4me3 = promoter_intersect_H3K4me3[["gene_name", "peak_ID"]]
+                promoter_intersect_H3K4me3 = promoter_intersect_H3K4me3. groupby(['peak_ID'], as_index=False).agg(",".join).reset_index().drop(["index"], axis=1)
+                        
+                # element connect to promoter through H3K4me3 peak
+                element_promoter = pd.merge(element_H3K4me3, promoter_intersect_H3K4me3, on="peak_ID", how="left")
+                element_promoter["H3K4me3"] = np.nan
+                element_promoter.loc[element_promoter["peak_ID"] != 0, "H3K4me3"] = "H3K4me3"
+                element_promoter["promoter"] = element_promoter["gene_name"]
+                element_promoter = element_promoter.drop_duplicates(subset=["ID", "H3K4me3", "promoter"])
+                element_promoter[["H3K4me3", "promoter"]] = element_promoter[["H3K4me3", "promoter"]].astype(str)
+                element_promoter = element_promoter.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join).reset_index().drop(["index"], axis=1)
+                
+                
+                intron_intersect = pd.read_csv(intron_intersect_infile, sep="\t",
+                                        names=["chr", "Start", "End", "Element.type", "ID", "intron_chr", "intron_start", "intron_end", "tx_id"])
+                
+                intron_intersect["transcript_id"] = intron_intersect["tx_id"].str.extract(r'(.+?)\.\d+')
+                intron_intersect_update = pd.merge(intron_intersect, hg38_tx2gene, on=["transcript_id"], how="left")
+                intron_intersect_update = intron_intersect_update.drop_duplicates(subset=['chr', 'Start', 'End', 'Element.type', 'ID', "gene_id"])
+                # group by element
+                intron_intersect_update = intron_intersect_update.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join)
+                intron_intersect_update = intron_intersect_update[["chr", "Start", "End", "Element.type", "ID", "gene_name"]]
+                
+                #element annotated with intron
+                element_intron = pd.merge(element, intron_intersect_update, on=["chr", "Start", "End", "Element.type", "ID"], how="left").fillna(0)
+                element_intron["intron"] = float('NaN')
+                element_intron.loc[element_intron["gene_name"] != 0, "intron"] = "intron"
+                element_intron["intron_gene"] = element_intron["gene_name"]
+                element_intron = element_intron.drop(["gene_name"], axis=1)
+                        
+                
+                exon_intersect = pd.read_csv(exon_intersect_infile, sep="\t",
+                                        names=["chr", "Start", "End", "Element.type", "ID", "exon_chr", "exon_start", "exon_end", "tx_id", "exon_id"])
+                exon_intersect["transcript_id"] = exon_intersect["tx_id"].str.extract(r'(.+?)\.\d+')
+                exon_intersect_update = pd.merge(exon_intersect, hg38_tx2gene, on=["transcript_id"], how="left")
+                exon_intersect_update = exon_intersect_update.drop_duplicates(subset=['chr', 'Start', 'End', 'Element.type', 'ID', "gene_id"])
+                
+                exon_intersect_update = exon_intersect_update.groupby(["chr", "Start", "End", "Element.type", "ID"], as_index=False).agg(",".join)
+                exon_intersect_update = exon_intersect_update[["chr", "Start", "End", "Element.type", "ID", "gene_name"]]
+                
+                element_exon = pd.merge(element, exon_intersect_update, on=["chr", "Start", "End", "Element.type", "ID"], how="left").fillna(0)
+                element_exon["exon"] = float('NaN')
+                element_exon.loc[element_exon["gene_name"] != 0, "exon"] = "exon"
+                element_exon["exon_gene"] = element_exon["gene_name"]
+                element_exon = element_exon.drop(["gene_name"], axis=1)
+        
+#%%        
+        if k4me3:
+                ann_list = [element_promoter, element_intron, element_exon]
+                element_anno_complete = reduce(lambda left,right: pd.merge(left, right, on=["chr", "Start", "End", "Element.type", "ID"], how="outer"), ann_list)
+                # remove dups within each cell
+                element_anno_complete[["intron", "exon"]] = element_anno_complete[["intron", "exon"]].astype(str)
+                element_anno_complete.loc[element_anno_complete["intron_gene"] == 0, 'intron_gene'] = "nan"
+                element_anno_complete.loc[element_anno_complete["exon_gene"] == 0, 'exon_gene'] = "nan"
+                element_anno_complete["intergenic"] = "nan"
+                element_anno_complete.loc[(element_anno_complete["promoter"] == "nan") & (element_anno_complete["intron"] == "nan") & (element_anno_complete["exon"] == "nan"), "intergenic"] = "intergenic"
+                
+                element_anno_complete = element_anno_complete.replace(to_replace ="nan", value ="") 
+                # element_anno_complete.to_csv(r'C:\Users\libin\UCSF\MMR\manual_annotation_complete_0718.csv', sep=",", index=False, header=True)
+                
+                
+                ### group intron, exon to genic
+                ### set annotation priority to : promoter, genic, intergenic
+                element_anno_complete["annotation"] = np.nan
+                element_anno_complete["cognate_gene"] = np.nan
+                
+                element_anno_complete.loc[element_anno_complete["promoter"] != "", "annotation"] = "promoter"
+                element_anno_complete["cognate_gene"] = (element_anno_complete["promoter"]).where(element_anno_complete["annotation"].str.contains("promoter"))
+                element_anno_complete.loc[(element_anno_complete["promoter"] == "") & ((element_anno_complete["exon"] != "") | (element_anno_complete["intron"] != "")), "annotation"] = "genic"
+                element_anno_complete["cognate_gene"] = np.where((element_anno_complete["annotation"] == "genic"),(element_anno_complete["exon_gene"]+" "+element_anno_complete["intron_gene"]) ,element_anno_complete["cognate_gene"])
+                element_anno_complete.loc[element_anno_complete["intergenic"] != "", "annotation"] = "intergenic"
+                
+                element_anno_complete_update = element_anno_complete[['chr','Start','End','Element.type','ID','annotation','cognate_gene']]
+                element_anno_complete_update.to_csv(r'C:\Users\libin\UCSF\MMR\manual_annotation_complete_update_{}_{}.csv'.format(source, date), sep=",", index=False, header=True)
+        else:
+                ann_list = [element_promoter, element_intron, element_exon]
+                element_anno_complete = reduce(lambda left,right: pd.merge(left, right, on=["chr", "Start", "End", "Element.type", "ID"], how="outer"), ann_list)
+                # remove dups within each cell
+                element_anno_complete[["intron", "exon", "promoter"]] = element_anno_complete[["intron", "exon", "promoter"]].astype(str)
+                element_anno_complete.loc[element_anno_complete["intron_gene"] == 0, 'intron_gene'] = "nan"
+                element_anno_complete.loc[element_anno_complete["exon_gene"] == 0, 'exon_gene'] = "nan"
+                element_anno_complete["intergenic"] = "nan"
+                element_anno_complete.loc[(element_anno_complete["promoter"] == "nan") & (element_anno_complete["intron"] == "nan") & (element_anno_complete["exon"] == "nan"), "intergenic"] = "intergenic"
+                
+                element_anno_complete = element_anno_complete.replace(to_replace ="nan", value ="") 
+                # element_anno_complete.to_csv(r'C:\Users\libin\UCSF\MMR\manual_annotation_complete_0718.csv', sep=",", index=False, header=True)
+                
+                
+                ### group intron, exon to genic
+                ### set annotation priority to : promoter, genic, intergenic
+                element_anno_complete["annotation"] = np.nan
+                element_anno_complete["cognate_gene"] = np.nan
+                
+                element_anno_complete.loc[element_anno_complete["promoter"] != "", "annotation"] = "promoter"
+                element_anno_complete["cognate_gene"] = (element_anno_complete["promoter_gene"]).where(element_anno_complete["annotation"].str.contains("promoter"))
+                element_anno_complete.loc[(element_anno_complete["promoter"] == "") & ((element_anno_complete["exon"] != "") | (element_anno_complete["intron"] != "")), "annotation"] = "genic"
+                element_anno_complete["cognate_gene"] = np.where((element_anno_complete["annotation"] == "genic"),(element_anno_complete["exon_gene"]+" "+element_anno_complete["intron_gene"]) ,element_anno_complete["cognate_gene"])
+                element_anno_complete.loc[element_anno_complete["intergenic"] != "", "annotation"] = "intergenic"
+                
+                element_anno_complete_update = element_anno_complete[['chr','Start','End','Element.type','ID','annotation','cognate_gene']]
+                element_anno_complete_update.to_csv(r'C:\Users\libin\UCSF\MMR\manual_annotation_complete_update_{}_{}.csv'.format(source, date), sep=",", index=False, header=True)
+        
 #%%
 
 if chipseeker:
