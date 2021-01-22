@@ -19,9 +19,9 @@ Assign genomic annotations to MMR element (ATAC-Seq peaks)
 #                chipseeker_MMR.R
 #         if bedtools:
 #                bedtools intersect -a mmr_elements_withID -b WTC11_H3K4me3_merged.q1e-4.shrt_peaks.final.bed -wa -wb > MMR_element.H4K4me3.intersect
-#                bedtools intersect -a mmr_elements_withID -b hg38_exon_by_tx -wa -wb > MMR_element.exon.intersect
-#                bedtools intersect -a mmr_elements_withID -b hg38_intron_by_tx -wa -wb > MMR_element.intron.intersect
-#                bedtools intersect -a gencode.v32.byTX.500bp.promoter -b WTC11_H3K4me3_merged.q1e-4.shrt_peaks.final.bed -wa -wb > promoter.H3K4me3.intersect
+#                bedtools intersect -a mmr_elements_withID -b hg38_exon_by_tx -wa -wb > MMR_element.exon.intersect # GENCODE
+#                bedtools intersect -a mmr_elements_withID -b hg38_intron_by_tx -wa -wb > MMR_element.intron.intersect # GENCODE
+#                bedtools intersect -a gencode.v32.byTX.500bp.promoter -b WTC11_H3K4me3_merged.q1e-4.shrt_peaks.final.bed -wa -wb > promoter.H3K4me3.intersect # GENCODE
                                   
 
 #%%
@@ -38,16 +38,16 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 
 #%%
-chipseeker = False # if annotation is chipseeker-based
-bedtools = True # if annotation is bedtools-intersect based
-k4me3 = False # if taking H3K4me3 into consideration
+chipseeker = False # whether annotation is chipseeker-based
+bedtools = True # whether annotation is bedtools-intersect based
+k4me3 = False # whether taking H3K4me3 into consideration when defining promoters
 source = 'refseq'
 date='0801'
 
 #%%
 element = pd.read_csv(r'C:\Users\libin\UCSF\MMR\mmr_elements_withID', sep="\t")
 
-hg38_geneID2Name = pd.read_csv(r'C:\Users\libin\UCSF\hg38_general\gencode.v32.geneID2geneNameType', sep="\t").dropna(axis=0)
+hg38_geneID2Name = pd.read_csv(r'C:\Users\libin\UCSF\hg38_general\gencode.v32.geneID2geneNameType', sep="\t").dropna(axis=0) # GENCODE
 #hg38_tx2gene = pd.read_csv(r'C:\Users\libin\UCSF\hg38_general\gencode.v32.transcript2gene', sep="\t").dropna(axis=0)
 hg38_tx2gene = pd.read_csv(r'C:\Users\libin\UCSF\hg38_general\refseq\refseq.hg38.txID2geneName', sep="\t").dropna(axis=0)
 
@@ -69,11 +69,11 @@ if bedtools:
         element_H3K4me3 = pd.merge(element, H3K4me3_intersect, on=['chr', 'Start', 'End', 'Element.type', 'ID'], how="left").fillna(0)
         #element_H3K4me3 = element_H3K4me3.drop_duplicates(subset=['chr', 'Start', 'End', 'Element.type', 'ID'], keep="first").fillna(0)
         element_H3K4me3[["peak_start", "peak_end", "peak_ID"]] = element_H3K4me3[["peak_start", "peak_end", "peak_ID"]].astype(int)   
-        # H3K4me3 linked to promoter regions they intersect with
 #%%        
         if source == "refseq":                
                 #%%
                 if k4me3:
+                        # H3K4me3 linked to promoter regions they intersect with
                         promoter_intersect_H3K4me3 = pd.read_csv(promoter_intersect_H3K4me3_infile, sep="\t",
                                                         names=["pmt_chr", "pmt_start", "pmt_end", "tx_id", "gene_name", "peak_chr", "peak_start", "peak_end", "strand", "peak_ID", "depr"])
 

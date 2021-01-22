@@ -23,6 +23,8 @@ matplotlib.rcParams['ps.fonttype'] = 42
 import matplotlib as mpl
 mpl.rcParams['figure.dpi']= 300
 
+date="0118"
+
 #%%
 pre_process = False
 #%%
@@ -53,12 +55,13 @@ df_list = []
 for file in file_path_list:
         file_name = file.split("\\")[-1]
         basename = "".join(re.findall(r'(.+)_summary', file_name))
-        dataframe = pd.read_csv(file, sep="\t", skiprows=1, names=['chr','start','end','ATAC_pooled','ChIP_H3K27ac_norm_pooled','Cut_Tag_CTCF_pooled','Cut_Tag_H3K27ac_pooled','Cut_Tag_H3K4me3_pooled'])
+        dataframe = pd.read_csv(file, sep="\t", skiprows=1, names=['chr','start','end','ChIP_H3K27ac_norm_pooled','Cut_Tag_CTCF_pooled','Cut_Tag_H3K27ac_pooled','Cut_Tag_H3K4me3_pooled','LM059_LM063'])
         #dataframe = dataframe.drop(['ChIP_H3K27ac_pooled', 'Cut_Tag_CTCF_pooled', 'Cut_Tag_H3K27ac_pooled', 'Cut_Tag_H3K4me3_pooled'], axis=1)
         #dataframe = dataframe.rename(columns={"KJ207": "CTCF_1", "KJ209": "CTCF_2", "KJ208": "H3K27ac_1", "KJ210": "H3K27ac_2", "KJ220": "H3K27ac_3", "KJ222": "H3K27ac_4", "LMA93": "ATAC_1", "LMA97": "ATAC_2", "NE009": "H3K4me3_1", "NE013": "H3K4me3_2"})
         #dataframe = dataframe[["CTCF_1", "CTCF_2", "H3K27ac_1", "H3K27ac_2", "H3K27ac_3", "H3K27ac_4", "H3K4me3_1", "H3K4me3_2", "ATAC_1", "ATAC_2"]]
-        dataframe = dataframe.rename(columns={"ATAC_pooled": "ATAC", "ChIP_H3K27ac_norm_pooled": "ChIP_H3K27ac", "Cut_Tag_H3K27ac_pooled": "Cut_Tag_H3K27ac", "Cut_Tag_CTCF_pooled": "CTCF", "Cut_Tag_H3K4me3_pooled": "H3K4me3"})
+        dataframe = dataframe.rename(columns={"LM059_LM063": "ATAC", "ChIP_H3K27ac_norm_pooled": "ChIP_H3K27ac", "Cut_Tag_H3K27ac_pooled": "Cut_Tag_H3K27ac", "Cut_Tag_CTCF_pooled": "CTCF", "Cut_Tag_H3K4me3_pooled": "H3K4me3"})
         dataframe = dataframe[['ATAC','ChIP_H3K27ac','Cut_Tag_H3K27ac','CTCF','H3K4me3']]
+        print (dataframe.shape[0])
         dataframe_melt = pd.melt(dataframe, value_name="marker_signal", var_name="")
         dataframe_melt["type"] = basename
 
@@ -70,14 +73,17 @@ for file in file_path_list:
         plt.yticks(fontname="Arial", fontsize=12)
         ax = sns.lineplot(data=dataframe)
         #plt.savefig(r'C:\Users\libin\UCSF\MMR\enrichment/element_enrichment_0827_linePlot_{}.pdf'.format(basename), transparent=True) 
-
         
         df_list.append(dataframe_melt)
+        dataframe_T = dataframe.T
+        dataframe_T_melt = pd.melt(dataframe_T, value_name="marker_signal", var_name="")
+
+        #dataframe["type"] = basename
         
 #%%
 
 dataframe_melt_concat = pd.concat(df_list)
-dataframe_melt_concat.to_csv(r'C:\Users\libin\UCSF\MMR\enrichment\dataframe_melt_concat.csv', sep="\t", index=False, header=False)
+dataframe_melt_concat.to_csv(r'C:\Users\libin\UCSF\MMR\enrichment\dataframe_melt_concat_{}.csv'.format(date), sep=",", index=False, header=False)
 
 #%%
 ax = plt.figure(figsize=(16,10))
@@ -91,7 +97,7 @@ plt.setp(ax.lines, color="grey", linewidth=0.5)
 plt.setp(ax.spines.values(), color="black", linewidth=0.5)
 ax = sns.swarmplot(x="", y="marker_signal", hue="type", data=dataframe_melt_concat, color='grey', size=1.5, dodge=True)
 
-plt.savefig(r'C:\Users\libin\UCSF\MMR\enrichment/element_enrichment_0824.pdf', transparent=True) 
+plt.savefig(r'C:\Users\libin\UCSF\MMR\enrichment/element_enrichment_{}.pdf'.format(date), transparent=True) 
 
 #%%
 ## one plot for each marker
@@ -107,7 +113,7 @@ for m in marker_list:
         plt.setp(ax.spines.values(), color="black", linewidth=0.5)
         ax = sns.swarmplot(x="", y="marker_signal", hue="type", data=dataframe_melt_concat_subset, color='grey', size=1.5, dodge=True)
         
-        plt.savefig(r'C:\Users\libin\UCSF\MMR\enrichment/element_enrichment_{}_0828.pdf'.format(m), transparent=True) 
+        plt.savefig(r'C:\Users\libin\UCSF\MMR\enrichment/element_enrichment_{}_{}.pdf'.format(m, date), transparent=True) 
 
 #%%
 # Kruskal–Wallis test
